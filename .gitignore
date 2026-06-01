@@ -16,12 +16,16 @@ env/
 .ipynb_checkpoints/
 
 # Data and models (large binaries — don't commit)
-data/
-models/
-results/
+data/*
+!data/.gitkeep
+models/*
+!models/.gitkeep
+results/*
+!results/.gitkeep
 
 # Logs
-logs/
+logs/*
+!logs/.gitkeep
 *.log
 
 # OS

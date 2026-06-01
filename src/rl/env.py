@@ -128,8 +128,10 @@ class HedgingEnv(gym.Env):
     def step(self, action: np.ndarray) -> Tuple[np.ndarray, float, bool, bool, Dict]:
         delta_target = float(np.clip(action[0], -1.0, 1.0))
 
-        spot_curr = float(self.market_paths[self._ep_idx, self._step])
-        spot_next = float(self.market_paths[self._ep_idx, self._step + 1])
+        log_spot_curr = float(self.market_paths[self._ep_idx, self._step])
+        log_spot_next = float(self.market_paths[self._ep_idx, self._step + 1])
+        spot_curr = np.exp(log_spot_curr)   # actual spot price for BS/PnL
+        spot_next = np.exp(log_spot_next)   # actual spot price for BS/PnL
         iv_curr = self.iv_surfaces[self._ep_idx, self._step]
 
         ttm_curr = self.ttm_max * (1.0 - self._step / self.n_steps)
@@ -160,7 +162,7 @@ class HedgingEnv(gym.Env):
         # Update state
         self._inventory = new_inventory
         self._step += 1
-        self._spot_history.append(np.log(spot_next))
+        self._spot_history.append(log_spot_next)  # history stores log-spot (already in log space)
         self._iv_history.append(float(self.iv_surfaces[self._ep_idx, self._step].mean()))
         if len(self._spot_history) > self.history_window:
             self._spot_history = self._spot_history[-self.history_window:]
@@ -224,8 +226,8 @@ class HedgingEnv(gym.Env):
 
     def _get_obs(self) -> np.ndarray:
         step = min(self._step, self.n_steps)
-        spot = float(self.market_paths[self._ep_idx, step])
-        moneyness = float(np.log(spot / self.K))
+        log_spot = float(self.market_paths[self._ep_idx, step])
+        moneyness = float(log_spot - np.log(self.K))  # log(actual_spot / K)
         ttm_frac = 1.0 - step / self.n_steps
         iv_flat = self.iv_surfaces[self._ep_idx, step].ravel()
         sig = self._compute_signature()

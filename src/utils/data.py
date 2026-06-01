@@ -168,3 +168,46 @@ def generate_synthetic_market(
     iv_surfaces = np.clip(iv_surfaces, 0.05, 1.0)
 
     return log_spot, iv_surfaces
+
+
+def gan_output_to_env_inputs(
+    gan_output: np.ndarray,
+    S0: float = 100.0,
+    n_strikes: int = 5,
+    n_maturities: int = 3,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Convert GAN generator output to HedgingEnv-compatible arrays.
+
+    Parameters
+    ----------
+    gan_output : ndarray (N, T, 2)
+        GAN output where [..., 0] = log_returns and [..., 1] = avg_iv.
+    S0 : float
+        Initial spot price used to anchor the log-spot path.
+    n_strikes, n_maturities : int
+        IV surface grid dimensions to broadcast avg_iv into.
+
+    Returns
+    -------
+    log_spot : ndarray (N, T+1)
+        Log-spot paths starting at log(S0).
+    iv_surfaces : ndarray (N, T+1, n_strikes, n_maturities)
+        IV surface at each step, broadcast from scalar avg_iv.
+    """
+    N, T, _ = gan_output.shape
+    log_returns = gan_output[:, :, 0]   # (N, T)
+    avg_iv = gan_output[:, :, 1]        # (N, T)
+
+    log_spot = np.zeros((N, T + 1))
+    log_spot[:, 0] = np.log(S0)
+    log_spot[:, 1:] = np.log(S0) + np.cumsum(log_returns, axis=1)
+
+    # Pad t=0 with the first step's avg_iv, then broadcast to full surface shape
+    avg_iv_padded = np.concatenate([avg_iv[:, :1], avg_iv], axis=1)  # (N, T+1)
+    iv_surfaces = np.broadcast_to(
+        avg_iv_padded[:, :, None, None],
+        (N, T + 1, n_strikes, n_maturities),
+    ).copy()
+    iv_surfaces = np.clip(iv_surfaces, 0.01, 2.0)
+
+    return log_spot, iv_surfaces

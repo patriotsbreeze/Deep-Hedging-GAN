@@ -138,6 +138,7 @@ class TD3Agent:
         )
 
         self._update_step = 0
+        self._actor_hidden = None  # episode-level hidden state for fRNN actor
         self.training_stats = {
             "critic_loss": [],
             "actor_loss": [],
@@ -148,6 +149,15 @@ class TD3Agent:
     # ------------------------------------------------------------------
     # Action selection
     # ------------------------------------------------------------------
+
+    def reset_episode(self) -> None:
+        """Reset the episode-level recurrent hidden state.
+
+        Must be called at the start of every episode when using an fRNN actor
+        so the GRU memory does not bleed across episode boundaries.
+        For SigFormer actors this is a no-op (_actor_hidden stays None).
+        """
+        self._actor_hidden = None
 
     @torch.no_grad()
     def select_action(self, obs: np.ndarray, explore: bool = True) -> np.ndarray:
@@ -164,10 +174,15 @@ class TD3Agent:
         action : ndarray of shape (action_dim,)
         """
         obs_t = torch.tensor(obs, dtype=torch.float32, device=self.device).unsqueeze(0)
-        # Handle both SigFormer (returns action) and fRNN (returns action, hidden)
-        out = self.actor(obs_t)
+        # Pass and update the episode hidden state for fRNN actors.
+        # On the first step _actor_hidden is None so both actor types use the same call.
+        # After the first fRNN step _actor_hidden is a Tensor and gets threaded through.
+        if self._actor_hidden is not None:
+            out = self.actor(obs_t, self._actor_hidden)
+        else:
+            out = self.actor(obs_t)
         if isinstance(out, tuple):
-            action = out[0]
+            action, self._actor_hidden = out[0], out[1]
         else:
             action = out
         action = action.squeeze(0).cpu().numpy()
@@ -278,6 +293,7 @@ class TD3Agent:
 
         for ep in range(1, n_episodes + 1):
             obs, _ = env.reset()
+            self.reset_episode()  # reset fRNN hidden state at episode boundary
             ep_reward = 0.0
             ep_pnl = 0.0
             done = False

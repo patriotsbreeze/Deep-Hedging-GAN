@@ -20,7 +20,7 @@ import torch
 
 from src.mafbm import MAFBMCalibrator, MAFBMSimulator
 from src.rl import HedgingEnv, HedgingReward, SigFormerActor, SigFormerCritic, FRNNActor, FRNNCritic, TD3Agent
-from src.utils.data import generate_synthetic_market
+from src.utils.data import generate_synthetic_market, gan_output_to_env_inputs
 
 
 def build_env(spot_paths, iv_surfaces, reward_cfg=None):
@@ -46,19 +46,8 @@ def main(args):
     synthetic_path = "data/synthetic/market_paths.npy"
     if os.path.exists(synthetic_path):
         print(f"Loading synthetic paths from {synthetic_path} ...")
-        # synthetic paths are (N, T, 2): [log_returns, avg_iv]
-        # Reconstruct spot paths from log returns
-        raw = np.load(synthetic_path)
-        N, T, _ = raw.shape
-        log_returns = raw[:, :, 0]
-        avg_iv = raw[:, :, 1]
-        S0 = 100.0
-        log_spot = np.zeros((N, T + 1))
-        log_spot[:, 0] = np.log(S0)
-        log_spot[:, 1:] = np.log(S0) + np.cumsum(log_returns, axis=1)
-        # Build minimal IV surfaces: (N, T+1, n_strikes=1, n_maturities=1)
-        avg_iv_padded = np.concatenate([avg_iv[:, :1], avg_iv], axis=1)
-        iv_surfaces = avg_iv_padded[:, :, None, None]
+        raw = np.load(synthetic_path)   # (N, T, 2): [log_returns, avg_iv]
+        log_spot, iv_surfaces = gan_output_to_env_inputs(raw, S0=100.0, n_strikes=1, n_maturities=1)
     else:
         print("Synthetic data not found; generating GBM paths for testing ...")
         log_spot, iv_surfaces = generate_synthetic_market(
