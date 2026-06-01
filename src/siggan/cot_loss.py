@@ -140,12 +140,17 @@ class CausalOTLoss(nn.Module):
         alpha = torch.rand(B, 1, 1, device=x_real.device)
         interp = (alpha * x_real + (1.0 - alpha) * x_fake).requires_grad_(True)
         d_interp = discriminator(interp)
+        # allow_unused=True handles the iisignature path which detaches from the graph;
+        # in that case grad is None → zero gradient → penalty penalises flat discriminator.
         grad = torch.autograd.grad(
             outputs=d_interp.sum(),
             inputs=interp,
             create_graph=True,
             retain_graph=True,
+            allow_unused=True,
         )[0]
+        if grad is None:
+            grad = torch.zeros_like(interp)
         grad_norm = grad.reshape(B, -1).norm(2, dim=1)
         return lambda_gp * ((grad_norm - 1.0) ** 2).mean()
 

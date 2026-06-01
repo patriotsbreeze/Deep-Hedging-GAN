@@ -86,18 +86,15 @@ class TestSignatureLayer:
         expected = sum(d_eff ** k for k in range(1, depth + 1))
         assert layer.output_dim == expected
 
-    def test_forward_shape_fallback(self):
-        # Force fallback by patching _iisig to None
-        layer = SignatureLayer(in_channels=3, depth=3, with_time=True)
-        layer._iisig = None
+    def test_forward_shape(self):
         B, T, d = 4, 20, 3
+        layer = SignatureLayer(in_channels=d, depth=3, with_time=True)
         x = torch.randn(B, T, d)
         out = layer(x)
         assert out.shape == (B, layer.output_dim)
 
     def test_forward_no_crash(self):
         layer = SignatureLayer(in_channels=2, depth=2, with_time=False)
-        layer._iisig = None
         x = torch.randn(3, 15, 2)
         out = layer(x)
         assert out.ndim == 2
@@ -108,7 +105,6 @@ class TestSignatureDiscriminator:
     def test_output_shape(self):
         B, T, in_channels = 5, 30, 6
         disc = SignatureDiscriminator(in_channels=in_channels, sig_depth=3, hidden_dim=64, n_layers=2)
-        disc.sig_layer._iisig = None  # use fallback for speed
         x = torch.randn(B, T, in_channels)
         out = disc(x)
         assert out.shape == (B, 1)
@@ -116,7 +112,6 @@ class TestSignatureDiscriminator:
     def test_output_unbounded(self):
         # Wasserstein critic should NOT apply sigmoid/tanh
         disc = SignatureDiscriminator(in_channels=3, sig_depth=2, hidden_dim=32, n_layers=2)
-        disc.sig_layer._iisig = None
         x = torch.randn(4, 10, 3)
         out = disc(x)
         # Values can be anywhere (not clamped to [0,1])
@@ -142,7 +137,6 @@ class TestCausalOTLoss:
         B, T, d = 4, 15, 3
         cot = CausalOTLoss(in_channels=d, J=2, hidden_dim=32, lambda_cot=1.0)
         disc = SignatureDiscriminator(in_channels=d, sig_depth=2, hidden_dim=32, n_layers=1)
-        disc.sig_layer._iisig = None
         x_real = torch.randn(B, T, d)
         x_fake = torch.randn(B, T, d)
         return cot, disc, x_real, x_fake

@@ -61,7 +61,9 @@ def compute_optimal_weights(
     t_grid = np.linspace(1e-6, T, 1000)
     K_true = t_grid ** (H - 0.5)
     K_approx = (omega[:, None] * np.exp(-gammas[:, None] * t_grid[None, :])).sum(0)
-    residual = float(np.trapezoid((K_true - K_approx) ** 2, t_grid))
+    # np.trapezoid added in NumPy 2.0; np.trapz is the compatible alias
+    _trapz = getattr(np, "trapezoid", np.trapz)
+    residual = float(_trapz((K_true - K_approx) ** 2, t_grid))
 
     return MAFBMWeights(H=H, gammas=gammas, omega=omega, residual=residual)
 
