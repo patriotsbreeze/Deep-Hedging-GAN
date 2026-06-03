@@ -71,6 +71,14 @@ def main(args):
     output_dim = real_data.shape[-1]
     print(f"  Real data shape: {real_data.shape}")
 
+    # Normalise each channel to zero mean, unit std so the GAN learns at a
+    # consistent scale.  Stats saved alongside the model for denormalisation.
+    data_mean = real_data.mean(axis=(0, 1), keepdims=True)   # (1, 1, 2)
+    data_std  = real_data.std(axis=(0, 1), keepdims=True) + 1e-8
+    real_data_norm = (real_data - data_mean) / data_std
+    print(f"  Channel means (before norm): {data_mean.squeeze().tolist()}")
+    print(f"  Channel stds  (before norm): {data_std.squeeze().tolist()}")
+
     # ----------------------------------------------------------------
     # 3. Construct networks
     # ----------------------------------------------------------------
@@ -103,7 +111,7 @@ def main(args):
         generator=gen,
         discriminator=disc,
         cot_loss=cot,
-        real_data=real_data,
+        real_data=real_data_norm,   # train on normalised data
         mafbm_simulator=simulator,
         hurst_range=(0.05, 0.45),
         device=device,
@@ -118,10 +126,17 @@ def main(args):
     # 5. Generate synthetic dataset for RL
     # ----------------------------------------------------------------
     print(f"\nGenerating {args.n_generated:,} synthetic market paths ...")
-    synthetic = trainer.generate(args.n_generated)
+    synthetic_norm = trainer.generate(args.n_generated)   # (N, T, 2), normalised scale
+    # Denormalise back to natural units (log-returns, avg-IV)
+    synthetic = synthetic_norm * data_std[0] + data_mean[0]
     os.makedirs("data/synthetic", exist_ok=True)
     np.save("data/synthetic/market_paths.npy", synthetic)
+    # Save normalisation stats for reference
+    np.save("data/synthetic/norm_mean.npy", data_mean)
+    np.save("data/synthetic/norm_std.npy", data_std)
     print(f"Saved synthetic paths to data/synthetic/market_paths.npy")
+    print(f"  Generated log_returns min/max/mean: {synthetic[:,:,0].min():.4f} / {synthetic[:,:,0].max():.4f} / {synthetic[:,:,0].mean():.4f}")
+    print(f"  Generated avg_iv     min/max/mean: {synthetic[:,:,1].min():.4f} / {synthetic[:,:,1].max():.4f} / {synthetic[:,:,1].mean():.4f}")
 
 
 if __name__ == "__main__":

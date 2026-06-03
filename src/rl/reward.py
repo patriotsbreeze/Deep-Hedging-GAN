@@ -76,7 +76,7 @@ class HedgingReward:
             return self.kappa_base
         es = self._expected_shortfall()
         # Amplify κ when ES is very negative (rough regime detected)
-        amplification = max(1.0, 1.0 + abs(es) / (self.base + 1e-8))
+        amplification = min(10.0, max(1.0, 1.0 + abs(es) / (self.base + 1e-8)))
         return self.kappa_base * amplification
 
     def compute(self, pnl: float) -> float:

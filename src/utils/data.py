@@ -198,6 +198,10 @@ def gan_output_to_env_inputs(
     log_returns = gan_output[:, :, 0]   # (N, T)
     avg_iv = gan_output[:, :, 1]        # (N, T)
 
+    # Clip log-returns to ±5 daily std devs (20% annual vol → daily std ≈ 0.013)
+    # Prevents exp() overflow when the GAN generates pathological paths
+    log_returns = np.clip(log_returns, -0.15, 0.15)
+
     log_spot = np.zeros((N, T + 1))
     log_spot[:, 0] = np.log(S0)
     log_spot[:, 1:] = np.log(S0) + np.cumsum(log_returns, axis=1)
